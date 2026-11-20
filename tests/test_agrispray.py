@@ -1,3 +1,4 @@
+import pytest
 from agrispray import DroneUnit, SprayMission, AgriSprayFleetManager
 
 
@@ -18,6 +19,8 @@ def test_mission_scheduling_and_refills():
     assert plan["required_liters"] == 45.0
     assert plan["refill_stops"] == 1
     assert plan["wind_safe"] is True
+    assert plan["thermal_safe"] is True
+    assert plan["estimated_flight_km"] > 0
 
 
 def test_high_wind_and_low_battery_safety_holds():
@@ -45,4 +48,44 @@ def test_high_wind_and_low_battery_safety_holds():
     assert mgr.schedule_mission(low_bat)["status"] == "HOLD_LOW_BATTERY"
     summary = mgr.fleet_analytics()
     assert summary["total_missions"] == 2
+    assert summary["hold_missions"] == 2
     assert summary["total_pesticide_liters"] == 18.0
+
+
+def test_thermal_evaporation_hold_and_mission_completion():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-03", model="Agras-T40", tank_capacity_liters=40.0, battery_pct=85.0))
+
+    hot_dry = SprayMission(
+        mission_id="MSN-201",
+        field_name="South Melon Field",
+        area_hectares=8.0,
+        target_dosage_l_per_ha=2.5,
+        wind_speed_kmh=14.0,
+        assigned_drone_id="DRN-03",
+        ambient_temp_c=38.5,
+        relative_humidity_pct=19.0,
+    )
+    plan_hold = mgr.schedule_mission(hot_dry)
+    assert plan_hold["status"] == "HOLD_THERMAL_EVAPORATION"
+    assert plan_hold["thermal_safe"] is False
+
+    with pytest.raises(RuntimeError):
+        mgr.complete_mission("MSN-201")
+
+    optimal = SprayMission(
+        mission_id="MSN-202",
+        field_name="Central Wheat Block",
+        area_hectares=10.0,
+        target_dosage_l_per_ha=2.0,
+        wind_speed_kmh=9.0,
+        assigned_drone_id="DRN-03",
+        ambient_temp_c=24.0,
+        relative_humidity_pct=60.0,
+    )
+    mgr.schedule_mission(optimal)
+    done = mgr.complete_mission("MSN-202", actual_liters_used=19.6)
+    assert done["status"] == "COMPLETED"
+    assert done["actual_liters_dispensed"] == 19.6
+    assert done["remaining_battery_pct"] == 67.0
+    assert mgr.fleet_analytics()["completed_missions"] == 1
