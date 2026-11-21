@@ -43,6 +43,15 @@ class SprayMission:
         """Prevents fine-droplet evaporation before canopy deposition (<= 35 C and >= 25% RH)."""
         return self.ambient_temp_c <= 35.0 and self.relative_humidity_pct >= 25.0
 
+    @property
+    def dosage_variance_pct(self) -> Optional[float]:
+        """Percentage variance between actual dispensed liters and planned required liters."""
+        if self.actual_liters_dispensed is None or self.total_pesticide_required_liters <= 0:
+            return None
+        delta = self.actual_liters_dispensed - self.total_pesticide_required_liters
+        return round((delta / self.total_pesticide_required_liters) * 100.0, 2)
+
+
 
 class AgriSprayFleetManager:
     """Manages agricultural spraying drones, mission scheduling, and pesticide analytics."""
@@ -105,12 +114,35 @@ class AgriSprayFleetManager:
             "mission_id": mission.mission_id,
             "status": mission.status,
             "actual_liters_dispensed": dispensed,
+            "dosage_variance_pct": mission.dosage_variance_pct,
             "remaining_battery_pct": drone.battery_pct,
+        }
+
+    def recharge_drone(self, drone_id: str, target_pct: float = 100.0) -> Dict[str, object]:
+        if drone_id not in self.drones:
+            raise ValueError(f"Unknown drone ID: {drone_id}")
+        drone = self.drones[drone_id]
+        drone.battery_pct = round(max(0.0, min(100.0, target_pct)), 2)
+
+        released = 0
+        for m in self.missions:
+            if m.assigned_drone_id == drone_id and m.status == "HOLD_LOW_BATTERY":
+                if drone.battery_pct >= 30.0 and m.is_wind_safe and m.is_thermal_safe:
+                    m.status = "READY"
+                    released += 1
+        return {
+            "drone_id": drone_id,
+            "battery_pct": drone.battery_pct,
+            "missions_released_to_ready": released,
         }
 
     def fleet_analytics(self) -> Dict[str, object]:
         total_ha = round(sum(m.area_hectares for m in self.missions), 2)
         total_liters = round(sum(m.total_pesticide_required_liters for m in self.missions), 2)
+        actual_dispensed = round(
+            sum(m.actual_liters_dispensed for m in self.missions if m.actual_liters_dispensed is not None),
+            2,
+        )
         ready_count = sum(1 for m in self.missions if m.status == "READY")
         completed_count = sum(1 for m in self.missions if m.status == "COMPLETED")
         hold_count = sum(1 for m in self.missions if m.status.startswith("HOLD_"))
@@ -122,4 +154,5 @@ class AgriSprayFleetManager:
             "hold_missions": hold_count,
             "total_area_hectares": total_ha,
             "total_pesticide_liters": total_liters,
+            "actual_liters_dispensed": actual_dispensed,
         }

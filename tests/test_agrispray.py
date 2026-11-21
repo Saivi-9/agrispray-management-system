@@ -87,5 +87,27 @@ def test_thermal_evaporation_hold_and_mission_completion():
     done = mgr.complete_mission("MSN-202", actual_liters_used=19.6)
     assert done["status"] == "COMPLETED"
     assert done["actual_liters_dispensed"] == 19.6
+    assert done["dosage_variance_pct"] == -2.0
     assert done["remaining_battery_pct"] == 67.0
     assert mgr.fleet_analytics()["completed_missions"] == 1
+    assert mgr.fleet_analytics()["actual_liters_dispensed"] == 19.6
+
+
+def test_recharge_drone_releases_low_battery_holds():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-04", model="Agras-T20", tank_capacity_liters=20.0, battery_pct=18.0))
+    m = SprayMission(
+        mission_id="MSN-301",
+        field_name="East Barley Plot",
+        area_hectares=6.0,
+        target_dosage_l_per_ha=2.0,
+        wind_speed_kmh=11.0,
+        assigned_drone_id="DRN-04",
+    )
+    assert mgr.schedule_mission(m)["status"] == "HOLD_LOW_BATTERY"
+
+    recharge_res = mgr.recharge_drone("DRN-04", target_pct=95.0)
+    assert recharge_res["battery_pct"] == 95.0
+    assert recharge_res["missions_released_to_ready"] == 1
+    assert m.status == "READY"
+
