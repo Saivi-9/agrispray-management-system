@@ -136,6 +136,42 @@ class AgriSprayFleetManager:
             "missions_released_to_ready": released,
         }
 
+    def update_weather_conditions(
+        self,
+        mission_id: str,
+        wind_speed_kmh: float,
+        ambient_temp_c: float = 25.0,
+        relative_humidity_pct: float = 55.0,
+    ) -> Dict[str, object]:
+        """Re-evaluate mission safety holds when field meteorological telemetry updates."""
+        mission = next((m for m in self.missions if m.mission_id == mission_id), None)
+        if mission is None:
+            raise ValueError(f"Unknown mission ID: {mission_id}")
+        if mission.status == "COMPLETED":
+            raise RuntimeError(f"Cannot update weather for completed mission {mission_id}")
+
+        mission.wind_speed_kmh = wind_speed_kmh
+        mission.ambient_temp_c = ambient_temp_c
+        mission.relative_humidity_pct = relative_humidity_pct
+        drone = self.drones[mission.assigned_drone_id]
+
+        if not mission.is_wind_safe:
+            mission.status = "HOLD_HIGH_WIND"
+        elif not mission.is_thermal_safe:
+            mission.status = "HOLD_THERMAL_EVAPORATION"
+        elif drone.battery_pct < 30.0:
+            mission.status = "HOLD_LOW_BATTERY"
+        else:
+            mission.status = "READY"
+
+        return {
+            "mission_id": mission.mission_id,
+            "status": mission.status,
+            "wind_safe": mission.is_wind_safe,
+            "thermal_safe": mission.is_thermal_safe,
+        }
+
+
     def fleet_analytics(self) -> Dict[str, object]:
         total_ha = round(sum(m.area_hectares for m in self.missions), 2)
         total_liters = round(sum(m.total_pesticide_required_liters for m in self.missions), 2)
