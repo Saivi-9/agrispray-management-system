@@ -111,3 +111,23 @@ def test_recharge_drone_releases_low_battery_holds():
     assert recharge_res["missions_released_to_ready"] == 1
     assert m.status == "READY"
 
+
+def test_update_weather_conditions_releases_and_applies_holds():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-05", model="Agras-T30", tank_capacity_liters=30.0, battery_pct=90.0))
+    m = SprayMission(
+        mission_id="MSN-401",
+        field_name="North Sunflowers",
+        area_hectares=7.5,
+        target_dosage_l_per_ha=2.0,
+        wind_speed_kmh=26.5,
+        assigned_drone_id="DRN-05",
+    )
+    assert mgr.schedule_mission(m)["status"] == "HOLD_HIGH_WIND"
+
+    cleared = mgr.update_weather_conditions("MSN-401", wind_speed_kmh=14.0, ambient_temp_c=23.0, relative_humidity_pct=58.0)
+    assert cleared["status"] == "READY"
+    assert cleared["wind_safe"] is True
+    assert cleared["thermal_safe"] is True
+
+
