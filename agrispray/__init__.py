@@ -171,6 +171,39 @@ class AgriSprayFleetManager:
             "thermal_safe": mission.is_thermal_safe,
         }
 
+    def reassign_mission_drone(self, mission_id: str, new_drone_id: str) -> Dict[str, object]:
+        """Reassign a pending or held mission to another registered drone and re-evaluate safety holds."""
+        mission = next((m for m in self.missions if m.mission_id == mission_id), None)
+        if mission is None:
+            raise ValueError(f"Unknown mission ID: {mission_id}")
+        if mission.status == "COMPLETED":
+            raise RuntimeError(f"Cannot reassign completed mission {mission_id}")
+        if new_drone_id not in self.drones:
+            raise ValueError(f"Unknown drone ID: {new_drone_id}")
+
+        mission.assigned_drone_id = new_drone_id
+        drone = self.drones[new_drone_id]
+        required_l = mission.total_pesticide_required_liters
+        refill_stops = max(0, int((required_l - 0.001) // drone.tank_capacity_liters)) if required_l > 0 else 0
+
+        if not mission.is_wind_safe:
+            mission.status = "HOLD_HIGH_WIND"
+        elif not mission.is_thermal_safe:
+            mission.status = "HOLD_THERMAL_EVAPORATION"
+        elif drone.battery_pct < 30.0:
+            mission.status = "HOLD_LOW_BATTERY"
+        else:
+            mission.status = "READY"
+
+        return {
+            "mission_id": mission.mission_id,
+            "assigned_drone_id": new_drone_id,
+            "status": mission.status,
+            "refill_stops": refill_stops,
+            "drone_battery_pct": drone.battery_pct,
+        }
+
+
 
     def fleet_analytics(self) -> Dict[str, object]:
         total_ha = round(sum(m.area_hectares for m in self.missions), 2)
