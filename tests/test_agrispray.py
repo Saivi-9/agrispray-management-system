@@ -131,3 +131,26 @@ def test_update_weather_conditions_releases_and_applies_holds():
     assert cleared["thermal_safe"] is True
 
 
+def test_reassign_mission_drone_updates_status_and_refills():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-LOW", model="Agras-T10", tank_capacity_liters=10.0, battery_pct=15.0))
+    mgr.register_drone(DroneUnit(drone_id="DRN-FULL", model="Agras-T40", tank_capacity_liters=40.0, battery_pct=96.0))
+
+    m = SprayMission(
+        mission_id="MSN-501",
+        field_name="South Citrus Block",
+        area_hectares=12.0,
+        target_dosage_l_per_ha=2.5,
+        wind_speed_kmh=10.0,
+        assigned_drone_id="DRN-LOW",
+    )
+    assert mgr.schedule_mission(m)["status"] == "HOLD_LOW_BATTERY"
+
+    reassigned = mgr.reassign_mission_drone("MSN-501", "DRN-FULL")
+    assert reassigned["assigned_drone_id"] == "DRN-FULL"
+    assert reassigned["status"] == "READY"
+    assert reassigned["refill_stops"] == 0
+    assert m.assigned_drone_id == "DRN-FULL"
+
+
+
