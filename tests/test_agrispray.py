@@ -153,4 +153,39 @@ def test_reassign_mission_drone_updates_status_and_refills():
     assert m.assigned_drone_id == "DRN-FULL"
 
 
+def test_drone_utilization_report():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-09", model="Agras-T30", tank_capacity_liters=30.0, battery_pct=88.0))
+    m1 = SprayMission(
+        mission_id="MSN-901",
+        field_name="West Vineyard",
+        area_hectares=5.0,
+        target_dosage_l_per_ha=2.0,
+        wind_speed_kmh=10.0,
+        assigned_drone_id="DRN-09",
+    )
+    m2 = SprayMission(
+        mission_id="MSN-902",
+        field_name="Ridge Olive Plot",
+        area_hectares=4.0,
+        target_dosage_l_per_ha=2.5,
+        wind_speed_kmh=25.0,
+        assigned_drone_id="DRN-09",
+    )
+    mgr.schedule_mission(m1)
+    mgr.schedule_mission(m2)
+    mgr.complete_mission("MSN-901", actual_liters_used=10.0, battery_drain_pct=20.0)
+
+    report = mgr.drone_utilization_report("DRN-09")
+    assert report["drone_id"] == "DRN-09"
+    assert report["assigned_missions_count"] == 2
+    assert report["completed_missions_count"] == 1
+    assert report["held_missions_count"] == 1
+    assert report["total_assigned_hectares"] == 9.0
+    assert report["total_dispensed_liters"] == 10.0
+    assert report["battery_pct"] == 68.0
+    assert report["needs_recharge"] is False
+
+
+
 
