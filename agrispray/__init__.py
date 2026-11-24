@@ -94,7 +94,13 @@ class AgriSprayFleetManager:
             "thermal_safe": mission.is_thermal_safe,
         }
 
-    def complete_mission(self, mission_id: str, actual_liters_used: Optional[float] = None) -> Dict[str, object]:
+    def complete_mission(
+        self,
+        mission_id: str,
+        actual_liters_used: Optional[float] = None,
+        actual_liters_dispensed: Optional[float] = None,
+        battery_drain_pct: Optional[float] = None,
+    ) -> Dict[str, object]:
         mission = next((m for m in self.missions if m.mission_id == mission_id), None)
         if mission is None:
             raise ValueError(f"Unknown mission ID: {mission_id}")
@@ -102,13 +108,16 @@ class AgriSprayFleetManager:
             raise RuntimeError(f"Cannot complete mission {mission_id} with status {mission.status}")
 
         drone = self.drones[mission.assigned_drone_id]
-        dispensed = round(
-            actual_liters_used if actual_liters_used is not None else mission.total_pesticide_required_liters,
-            2,
+        chosen_liters = (
+            actual_liters_dispensed
+            if actual_liters_dispensed is not None
+            else (actual_liters_used if actual_liters_used is not None else mission.total_pesticide_required_liters)
         )
+        dispensed = round(chosen_liters, 2)
         mission.actual_liters_dispensed = dispensed
         mission.status = "COMPLETED"
-        drone.battery_pct = round(max(0.0, drone.battery_pct - mission.area_hectares * 1.8), 2)
+        drain = battery_drain_pct if battery_drain_pct is not None else (mission.area_hectares * 1.8)
+        drone.battery_pct = round(max(0.0, drone.battery_pct - drain), 2)
 
         return {
             "mission_id": mission.mission_id,
@@ -202,6 +211,37 @@ class AgriSprayFleetManager:
             "refill_stops": refill_stops,
             "drone_battery_pct": drone.battery_pct,
         }
+
+    def drone_utilization_report(self, drone_id: str) -> Dict[str, object]:
+        """Generate an operational workload and battery readiness report for a registered drone."""
+        if drone_id not in self.drones:
+            raise ValueError(f"Unknown drone ID: {drone_id}")
+
+        drone = self.drones[drone_id]
+        assigned = [m for m in self.missions if m.assigned_drone_id == drone_id]
+        completed = [m for m in assigned if m.status == "COMPLETED"]
+        ready = [m for m in assigned if m.status == "READY"]
+        held = [m for m in assigned if m.status.startswith("HOLD_")]
+        total_ha = round(sum(m.area_hectares for m in assigned), 2)
+        dispensed_l = round(
+            sum(m.actual_liters_dispensed for m in completed if m.actual_liters_dispensed is not None),
+            2,
+        )
+
+        return {
+            "drone_id": drone.drone_id,
+            "model": drone.model,
+            "battery_pct": drone.battery_pct,
+            "tank_capacity_liters": drone.tank_capacity_liters,
+            "assigned_missions_count": len(assigned),
+            "completed_missions_count": len(completed),
+            "ready_missions_count": len(ready),
+            "held_missions_count": len(held),
+            "total_assigned_hectares": total_ha,
+            "total_dispensed_liters": dispensed_l,
+            "needs_recharge": drone.battery_pct < 30.0,
+        }
+
 
 
 
