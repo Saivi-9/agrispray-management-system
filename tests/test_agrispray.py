@@ -187,5 +187,54 @@ def test_drone_utilization_report():
     assert report["needs_recharge"] is False
 
 
+def test_weather_hold_summary():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-10", model="Agras-T40", tank_capacity_liters=40.0, battery_pct=90.0))
+    mgr.register_drone(DroneUnit(drone_id="DRN-11", model="Agras-T20", tank_capacity_liters=20.0, battery_pct=20.0))
+
+    mgr.schedule_mission(
+        SprayMission(
+            mission_id="MSN-W1",
+            field_name="Windy Ridge",
+            area_hectares=6.0,
+            target_dosage_l_per_ha=2.0,
+            wind_speed_kmh=26.0,
+            assigned_drone_id="DRN-10",
+        )
+    )
+    mgr.schedule_mission(
+        SprayMission(
+            mission_id="MSN-T1",
+            field_name="Arid South Block",
+            area_hectares=4.0,
+            target_dosage_l_per_ha=2.5,
+            wind_speed_kmh=12.0,
+            ambient_temp_c=38.0,
+            relative_humidity_pct=20.0,
+            assigned_drone_id="DRN-10",
+        )
+    )
+    mgr.schedule_mission(
+        SprayMission(
+            mission_id="MSN-B1",
+            field_name="Low Battery Meadow",
+            area_hectares=3.0,
+            target_dosage_l_per_ha=2.0,
+            wind_speed_kmh=10.0,
+            assigned_drone_id="DRN-11",
+        )
+    )
+
+    summary = mgr.weather_hold_summary()
+    assert summary["total_held_missions"] == 3
+    assert summary["high_wind_holds"] == 1
+    assert summary["thermal_evaporation_holds"] == 1
+    assert summary["low_battery_holds"] == 1
+    assert summary["held_area_hectares"] == 13.0
+    assert summary["held_pesticide_liters"] == 28.0
+    assert summary["held_mission_ids_by_reason"]["HOLD_HIGH_WIND"] == ["MSN-W1"]
+
+
+
 
 

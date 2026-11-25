@@ -242,6 +242,33 @@ class AgriSprayFleetManager:
             "needs_recharge": drone.battery_pct < 30.0,
         }
 
+    def weather_hold_summary(self) -> Dict[str, object]:
+        """Aggregate missions currently on safety hold by meteorological or battery cause."""
+        hold_categories = {
+            "HOLD_HIGH_WIND": [],
+            "HOLD_THERMAL_EVAPORATION": [],
+            "HOLD_LOW_BATTERY": [],
+        }
+        held_hectares = 0.0
+        held_liters = 0.0
+
+        for m in self.missions:
+            if m.status in hold_categories:
+                hold_categories[m.status].append(m.mission_id)
+                held_hectares += m.area_hectares
+                held_liters += m.total_pesticide_required_liters
+
+        total_held = sum(len(ids) for ids in hold_categories.values())
+        return {
+            "total_held_missions": total_held,
+            "high_wind_holds": len(hold_categories["HOLD_HIGH_WIND"]),
+            "thermal_evaporation_holds": len(hold_categories["HOLD_THERMAL_EVAPORATION"]),
+            "low_battery_holds": len(hold_categories["HOLD_LOW_BATTERY"]),
+            "held_mission_ids_by_reason": hold_categories,
+            "held_area_hectares": round(held_hectares, 2),
+            "held_pesticide_liters": round(held_liters, 2),
+        }
+
 
 
 
