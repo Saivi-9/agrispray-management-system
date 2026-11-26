@@ -235,6 +235,40 @@ def test_weather_hold_summary():
     assert summary["held_mission_ids_by_reason"]["HOLD_HIGH_WIND"] == ["MSN-W1"]
 
 
+def test_dosage_efficiency_report():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-12", model="Agras-T40", tank_capacity_liters=40.0, battery_pct=95.0))
+
+    m1 = SprayMission(
+        mission_id="MSN-D1",
+        field_name="Precision Block A",
+        area_hectares=10.0,
+        target_dosage_l_per_ha=2.0,
+        wind_speed_kmh=10.0,
+        assigned_drone_id="DRN-12",
+    )
+    m2 = SprayMission(
+        mission_id="MSN-D2",
+        field_name="Over-dispensed Block B",
+        area_hectares=10.0,
+        target_dosage_l_per_ha=2.0,
+        wind_speed_kmh=11.0,
+        assigned_drone_id="DRN-12",
+    )
+    mgr.schedule_mission(m1)
+    mgr.schedule_mission(m2)
+    mgr.complete_mission("MSN-D1", actual_liters_used=20.4, battery_drain_pct=15.0)
+    mgr.complete_mission("MSN-D2", actual_liters_used=22.0, battery_drain_pct=15.0)
+
+    report = mgr.dosage_efficiency_report(tolerance_pct=5.0)
+    assert report["completed_missions_evaluated"] == 2
+    assert report["planned_liters_total"] == 40.0
+    assert report["actual_liters_total"] == 42.4
+    assert report["overall_dosage_variance_pct"] == 6.0
+    assert report["within_tolerance_count"] == 1
+    assert report["out_of_tolerance_mission_ids"] == ["MSN-D2"]
+
+
 
 
 
