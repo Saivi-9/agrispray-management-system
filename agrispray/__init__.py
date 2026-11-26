@@ -269,6 +269,42 @@ class AgriSprayFleetManager:
             "held_pesticide_liters": round(held_liters, 2),
         }
 
+    def dosage_efficiency_report(self, tolerance_pct: float = 5.0) -> Dict[str, object]:
+        """Audit completed spray missions for planned vs. actual dosage precision and variance."""
+        completed = [
+            m for m in self.missions
+            if m.status == "COMPLETED" and m.actual_liters_dispensed is not None
+        ]
+        planned_total = round(sum(m.total_pesticide_required_liters for m in completed), 2)
+        actual_total = round(
+            sum(m.actual_liters_dispensed for m in completed if m.actual_liters_dispensed is not None),
+            2,
+        )
+        overall_variance_pct = (
+            round(((actual_total - planned_total) / planned_total) * 100.0, 2)
+            if planned_total > 0
+            else 0.0
+        )
+
+        within_tolerance = 0
+        out_of_tolerance_ids: List[str] = []
+        for m in completed:
+            var = m.dosage_variance_pct
+            if var is not None and abs(var) <= tolerance_pct:
+                within_tolerance += 1
+            else:
+                out_of_tolerance_ids.append(m.mission_id)
+
+        return {
+            "completed_missions_evaluated": len(completed),
+            "planned_liters_total": planned_total,
+            "actual_liters_total": actual_total,
+            "overall_dosage_variance_pct": overall_variance_pct,
+            "tolerance_threshold_pct": tolerance_pct,
+            "within_tolerance_count": within_tolerance,
+            "out_of_tolerance_mission_ids": out_of_tolerance_ids,
+        }
+
 
 
 
