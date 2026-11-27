@@ -269,6 +269,20 @@ def test_dosage_efficiency_report():
     assert report["out_of_tolerance_mission_ids"] == ["MSN-D2"]
 
 
+def test_fleet_battery_readiness_audit():
+    mgr = AgriSprayFleetManager()
+    mgr.register_drone(DroneUnit(drone_id="DRN-A1", model="Agras-T40", tank_capacity_liters=40.0, battery_pct=90.0))
+    mgr.register_drone(DroneUnit(drone_id="DRN-A2", model="Agras-T20", tank_capacity_liters=20.0, battery_pct=18.0))
+
+    audit = mgr.fleet_battery_readiness_audit(min_ready_pct=30.0)
+    assert audit["total_drones"] == 2
+    assert audit["ready_drones_count"] == 1
+    assert audit["low_battery_drones_count"] == 1
+    assert audit["average_battery_pct"] == 54.0
+    assert audit["low_battery_drone_ids"] == ["DRN-A2"]
+
+
+
 
 
 
