@@ -305,6 +305,28 @@ class AgriSprayFleetManager:
             "out_of_tolerance_mission_ids": out_of_tolerance_ids,
         }
 
+    def fleet_battery_readiness_audit(self, min_ready_pct: float = 30.0) -> Dict[str, object]:
+        """Audit registered drones for battery readiness, average charge, and recharge queue."""
+        if not self.drones:
+            return {
+                "total_drones": 0,
+                "ready_drones_count": 0,
+                "low_battery_drones_count": 0,
+                "average_battery_pct": 0.0,
+                "low_battery_drone_ids": [],
+            }
+
+        low_ids = [d.drone_id for d in self.drones.values() if d.battery_pct < min_ready_pct]
+        avg_bat = round(sum(d.battery_pct for d in self.drones.values()) / len(self.drones), 2)
+        return {
+            "total_drones": len(self.drones),
+            "ready_drones_count": len(self.drones) - len(low_ids),
+            "low_battery_drones_count": len(low_ids),
+            "average_battery_pct": avg_bat,
+            "low_battery_drone_ids": sorted(low_ids),
+        }
+
+
 
 
 
